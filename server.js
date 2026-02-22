@@ -1,4 +1,5 @@
 const express = require('express');
+const { body, validationResult } = require('express-validator');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -82,9 +83,26 @@ const getNextId = () => { // Generate the next unique ID based on existing items
   return maxId + 1;
 };
 
+const menuValidationRules = [ // Validation rules for creating/updating menu items
+  body('name').isString().trim().isLength({ min: 3 }).withMessage('Name must be at least 3 characters'),
+  body('description').isString().trim().isLength({ min: 10 }).withMessage('Description must be at least 10 characters'),
+  body('price').isFloat({ gt: 0 }).withMessage('Price must be a number greater than 0'),
+  body('category').isIn(['appetizer', 'entree', 'dessert', 'beverage']).withMessage('Category must be one of: appetizer, entree, dessert, beverage'),
+  body('ingredients').isArray({ min: 1 }).withMessage('Ingredients must be a non-empty array'),
+  body('available').optional().isBoolean().withMessage('Available must be a boolean').toBoolean()
+];
+
+const validateMenuRequest = (req, res, next) => { // Middleware to validate the request body for menu item creation/updating
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  next();
+};
+
 // GET /api/menu - Retrieve all menu items
 app.get('/api/menu', (req, res) => {
-  res.json(menuItems);
+  res.status(200).json(menuItems);
 });
 
 // GET /api/menu/:id - Retrieve a specific menu item
@@ -93,15 +111,12 @@ app.get('/api/menu/:id', (req, res) => {
   if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
   const item = menuItems.find(mi => mi.id === id);
   if (!item) return res.status(404).json({ error: 'Menu item not found' });
-  res.json(item);
+  res.status(200).json(item);
 });
 
 // POST /api/menu - Add a new menu item
-app.post('/api/menu', (req, res) => {
+app.post('/api/menu', menuValidationRules, validateMenuRequest, (req, res) => {
   const payload = req.body;
-  if (!payload || typeof payload !== 'object') { // Validate that the request body is present and is an object
-    return res.status(400).json({ error: 'Request body is required' });
-  }
 
   const newItem = {
     id: getNextId(),
@@ -113,16 +128,12 @@ app.post('/api/menu', (req, res) => {
     available: payload.available ?? true
   };
 
-  if (!newItem.name || typeof newItem.price !== 'number') {
-    return res.status(400).json({ error: 'Name and numeric price are required' });
-  }
-
   menuItems.push(newItem); // Add the new item to the array
   res.status(201).json(newItem);
 });
 
 // PUT /api/menu/:id - Update an existing menu item
-app.put('/api/menu/:id', (req, res) => {
+app.put('/api/menu/:id', menuValidationRules, validateMenuRequest, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' }); // Validate that the id parameter is a valid number
 
@@ -130,18 +141,15 @@ app.put('/api/menu/:id', (req, res) => {
   if (!item) return res.status(404).json({ error: 'Menu item not found' }); // Check if the item with the specified id exists
 
   const payload = req.body;
-  if (!payload || typeof payload !== 'object') {
-    return res.status(400).json({ error: 'Request body is required' });
-  }
 // Update only the fields that are provided in the request body
-  if (payload.name !== undefined) item.name = payload.name;
-  if (payload.description !== undefined) item.description = payload.description;
-  if (payload.price !== undefined) item.price = payload.price;
-  if (payload.category !== undefined) item.category = payload.category;
-  if (payload.ingredients !== undefined) item.ingredients = payload.ingredients;
-  if (payload.available !== undefined) item.available = payload.available;
+  item.name = payload.name;
+  item.description = payload.description;
+  item.price = payload.price;
+  item.category = payload.category;
+  item.ingredients = payload.ingredients || [];
+  item.available = payload.available ?? true;
 
-  res.json(item);
+  res.status(200).json(item);
 });
 
 // DELETE /api/menu/:id - Remove a menu item
@@ -153,7 +161,7 @@ app.delete('/api/menu/:id', (req, res) => {
   if (index === -1) return res.status(404).json({ error: 'Menu item not found' });
 
   const [removed] = menuItems.splice(index, 1);
-  res.json(removed);
+  res.status(200).json(removed);
 });
 
 // Start server
