@@ -1,6 +1,8 @@
-// Import packages, initialize an express app, and define the port you will use
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-
+app.use(express.json());
 
 // Data for the server
 const menuItems = [
@@ -60,4 +62,86 @@ const menuItems = [
   }
 ];
 
-// Define routes and implement middleware here
+const getNextId = () => { // Generate the next unique ID based on existing items
+  const maxId = menuItems.reduce((max, item) => Math.max(max, item.id), 0);
+  return maxId + 1;
+};
+
+// GET /api/menu - Retrieve all menu items
+app.get('/api/menu', (req, res) => {
+  res.json(menuItems);
+});
+
+// GET /api/menu/:id - Retrieve a specific menu item
+app.get('/api/menu/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+  const item = menuItems.find(mi => mi.id === id);
+  if (!item) return res.status(404).json({ error: 'Menu item not found' });
+  res.json(item);
+});
+
+// POST /api/menu - Add a new menu item
+app.post('/api/menu', (req, res) => {
+  const payload = req.body;
+  if (!payload || typeof payload !== 'object') { // Validate that the request body is present and is an object
+    return res.status(400).json({ error: 'Request body is required' });
+  }
+
+  const newItem = {
+    id: getNextId(),
+    name: payload.name,
+    description: payload.description,
+    price: payload.price,
+    category: payload.category,
+    ingredients: payload.ingredients || [],
+    available: payload.available ?? true
+  };
+
+  if (!newItem.name || typeof newItem.price !== 'number') {
+    return res.status(400).json({ error: 'Name and numeric price are required' });
+  }
+
+  menuItems.push(newItem); // Add the new item to the array
+  res.status(201).json(newItem);
+});
+
+// PUT /api/menu/:id - Update an existing menu item
+app.put('/api/menu/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' }); // Validate that the id parameter is a valid number
+
+  const item = menuItems.find(mi => mi.id === id); 
+  if (!item) return res.status(404).json({ error: 'Menu item not found' }); // Check if the item with the specified id exists
+
+  const payload = req.body;
+  if (!payload || typeof payload !== 'object') {
+    return res.status(400).json({ error: 'Request body is required' });
+  }
+// Update only the fields that are provided in the request body
+  if (payload.name !== undefined) item.name = payload.name;
+  if (payload.description !== undefined) item.description = payload.description;
+  if (payload.price !== undefined) item.price = payload.price;
+  if (payload.category !== undefined) item.category = payload.category;
+  if (payload.ingredients !== undefined) item.ingredients = payload.ingredients;
+  if (payload.available !== undefined) item.available = payload.available;
+
+  res.json(item);
+});
+
+// DELETE /api/menu/:id - Remove a menu item
+app.delete('/api/menu/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+
+  const index = menuItems.findIndex(mi => mi.id === id);
+  if (index === -1) return res.status(404).json({ error: 'Menu item not found' });
+
+  const [removed] = menuItems.splice(index, 1);
+  res.json(removed);
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+});
